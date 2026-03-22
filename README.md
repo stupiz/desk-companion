@@ -144,22 +144,24 @@ Current behavior:
 Compile only:
 
 ```bash
-/Users/maguro/.platformio/penv/bin/pio run -e desk_companion_t_display_long
+pio run -e desk_companion_t_display_long
 ```
 
 Flash to a connected board:
 
 ```bash
-/Users/maguro/.platformio/penv/bin/pio run -e desk_companion_t_display_long_upload -t upload --upload-port /dev/cu.<port>
+pio run -e desk_companion_t_display_long_upload -t upload --upload-port <port>
 ```
 
 Open serial monitor:
 
 ```bash
-/Users/maguro/.platformio/penv/bin/pio device monitor -b 115200 -p /dev/cu.<port>
+pio device monitor -b 115200 -p <port>
 ```
 
 The default PlatformIO environment is compile-only on purpose to avoid accidental uploads.
+
+If `pio` is not in your shell `PATH`, use the PlatformIO CLI installed on your machine instead.
 
 ## Useful Serial Commands
 
@@ -211,3 +213,7 @@ Calibration is useful if:
 ## Status
 
 This project is in active hardware bring-up and UX iteration, but the main workflow is already usable on the current target hardware.
+
+## Credits
+
+This project was developed with coding assistance from Codex GPT-5.4.
