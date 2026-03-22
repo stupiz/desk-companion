@@ -1,0 +1,7 @@
+.DS_Store
+.pio/
+.vscode/
+lib/Arduino_GFX-1.3.7/examples/
+lib/Arduino_GFX-1.3.7/more_examples/
+lib/Arduino_GFX-1.3.7/README.md
+lib/Arduino_GFX-1.3.7/README2.md
