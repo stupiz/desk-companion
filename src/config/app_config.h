@@ -47,7 +47,9 @@ static constexpr int16_t TOUCH_CALIBRATION_DEFAULT_MAP_Y1 = 0;
 static constexpr int16_t TOUCH_CALIBRATION_DEFAULT_MAP_Y2 = 0;
 #endif
 
-static constexpr unsigned long SENSOR_READ_INTERVAL_MS = 3000;
+static constexpr unsigned long SCD_POLL_INTERVAL_MS = 1000;
+static constexpr unsigned long SGP_READ_INTERVAL_MS = 1000;
+static constexpr unsigned long SENSOR_LOG_INTERVAL_MS = 3000;
 static constexpr unsigned long RENDER_INTERVAL_MS = 800;
 static constexpr unsigned long INPUT_POLL_MS = 24;
 

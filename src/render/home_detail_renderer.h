@@ -8,5 +8,6 @@ public:
     void render(const air_quality::AirSample& sample,
                 const air_quality::AirQualityScore& score,
                 bool scdOnline,
-                bool sgpOnline);
+                bool sgpOnline,
+                bool sgpWarmingUp);
 };

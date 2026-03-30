@@ -123,6 +123,7 @@ namespace {
                 signature = mixHash(signature, tenthsOrZero(gSample.humidityPct));
                 signature = mixHash(signature, gSample.vocIndex);
                 signature = mixHash(signature, static_cast<uint8_t>(gAirQualityScore.overall));
+                signature = mixHash(signature, gSensors.sgpWarmingUp() ? 1U : 0U);
                 break;
             case ui::AppPage::FOCUS:
                 signature = mixHash(signature, gPageManager.focusState().totalMs / 1000);
@@ -694,7 +695,12 @@ namespace {
                 gHomeEyesRenderer.render(gMood, gEyesOpen, gSample, gAirQualityScore, gHomeEyesStyle);
                 break;
             case ui::AppPage::HOME_DETAIL:
-                gHomeDetailRenderer.render(gSample, gAirQualityScore, gSensors.scdReady(), gSensors.sgpReady());
+                gHomeDetailRenderer.render(
+                    gSample,
+                    gAirQualityScore,
+                    gSensors.scdReady(),
+                    gSensors.sgpReady(),
+                    gSensors.sgpWarmingUp());
                 break;
             case ui::AppPage::FOCUS:
                 gFocusRenderer.render(

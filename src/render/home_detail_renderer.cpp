@@ -157,16 +157,17 @@ void drawMetricCard(Arduino_GFX* gfx,
                     const char* value,
                     const char* unit,
                     air_quality::SeverityLevel severity,
-                    bool online) {
+                    bool online,
+                    bool waiting = false) {
     if (gfx == nullptr) {
         return;
     }
 
-    const char* shownValue = online ? value : "OFFLINE";
-    const char* shownUnit = online ? unit : "";
-    const CardTheme theme = online ? severityTheme(severity) : kOfflineTheme;
+    const char* shownValue = online ? (waiting ? "WARMING" : value) : "OFFLINE";
+    const char* shownUnit = (online && !waiting) ? unit : "";
+    const CardTheme theme = !online ? kOfflineTheme : (waiting ? kWaitingTheme : severityTheme(severity));
     const uint16_t dividerColor = mixColor565(theme.fill, theme.border, 96);
-    const uint16_t valueColor = online ? theme.border : theme.text;
+    const uint16_t valueColor = (online && !waiting) ? theme.border : theme.text;
     drawCard(gfx, x, y, w, h, theme.border, theme.fill);
     gfx->fillRoundRect(x + 2, y + h - 7, w - 4, 5, 3, theme.stripe);
 
@@ -177,7 +178,7 @@ void drawMetricCard(Arduino_GFX* gfx,
 
     const uint8_t unitSize = online ? 2 : 1;
     int16_t valueSize = (strlen(shownValue) <= 5) ? 3 : 2;
-    if (!online) {
+    if (!online || waiting) {
         valueSize = 2;
     }
     int16_t groupW = 0;
@@ -213,20 +214,23 @@ void drawSummaryCard(Arduino_GFX* gfx,
                      const air_quality::AirQualityScore& score,
                      bool sampleValid,
                      bool scdOnline,
-                     bool sgpOnline) {
+                     bool sgpOnline,
+                     bool sgpWarmingUp) {
     if (gfx == nullptr) {
         return;
     }
-    (void)sgpOnline;
 
-    const CardTheme theme = !scdOnline ? kOfflineTheme : (sampleValid ? severityTheme(score.overall) : kWaitingTheme);
-    const uint16_t statusColor = (scdOnline && sampleValid) ? theme.border : theme.text;
+    const bool waiting = !scdOnline || !sampleValid || (sgpOnline && sgpWarmingUp);
+    const CardTheme theme = !scdOnline ? kOfflineTheme : (waiting ? kWaitingTheme : severityTheme(score.overall));
+    const uint16_t statusColor = (!scdOnline || waiting) ? theme.text : theme.border;
     drawCard(gfx, x, y, w, h, theme.border, theme.fill);
     gfx->fillRoundRect(x + 2, y + h - 7, w - 4, 5, 3, theme.stripe);
 
     display::drawText(x + 12, y + 10, "AIR QUALITY", theme.text, 2, theme.fill);
 
-    const char* overall = scdOnline ? (sampleValid ? air_quality::severityLabel(score.overall) : "WAITING") : "OFFLINE";
+    const char* overall = !scdOnline ? "OFFLINE"
+                        : (!sampleValid ? "WAITING"
+                                        : ((sgpOnline && sgpWarmingUp) ? "WARMING" : air_quality::severityLabel(score.overall)));
     const uint8_t overallSize = (display::textWidth(overall, 4) <= (w - 24)) ? 4 : 3;
     display::drawTextCentered(overall,
                               static_cast<int16_t>(x + w / 2),
@@ -239,7 +243,8 @@ void drawSummaryCard(Arduino_GFX* gfx,
 void renderDetailDisplay(const air_quality::AirSample& sample,
                          const air_quality::AirQualityScore& score,
                          bool scdOnline,
-                         bool sgpOnline) {
+                         bool sgpOnline,
+                         bool sgpWarmingUp) {
     if (!display::isReady()) {
         return;
     }
@@ -290,7 +295,7 @@ void renderDetailDisplay(const air_quality::AirSample& sample,
         const int16_t cardW = static_cast<int16_t>((gridW - cardGap) / 2);
         const int16_t cardH = static_cast<int16_t>((summaryH - cardGap) / 2);
 
-        drawSummaryCard(gfx, margin, topY, summaryW, summaryH, score, sample.valid, scdOnline, sgpOnline);
+        drawSummaryCard(gfx, margin, topY, summaryW, summaryH, score, sample.valid, scdOnline, sgpOnline, sgpWarmingUp);
 
         drawMetricCard(gfx, gridX, topY, cardW, cardH, "CO2", co2Value, "ppm", score.co2Severity, scdOnline && sample.valid);
         drawMetricCard(gfx,
@@ -322,7 +327,8 @@ void renderDetailDisplay(const air_quality::AirSample& sample,
                        vocValue,
                        "index",
                        score.vocSeverity,
-                       sgpOnline);
+                       sgpOnline,
+                       sgpWarmingUp);
         return;
     }
 
@@ -347,7 +353,13 @@ void renderDetailDisplay(const air_quality::AirSample& sample,
         display::drawText(leftX, row2Y + 14, line, kFg, 2, kBg);
 
         display::drawText(rightX, row2Y, "VOC", kDim, 1, kBg);
-        snprintf(line, sizeof(line), "%u", sample.vocIndex);
+        if (!sgpOnline) {
+            snprintf(line, sizeof(line), "OFFLINE");
+        } else if (sgpWarmingUp) {
+            snprintf(line, sizeof(line), "WARMING");
+        } else {
+            snprintf(line, sizeof(line), "%u", sample.vocIndex);
+        }
         display::drawText(rightX, row2Y + 14, line, kFg, 2, kBg);
 
         snprintf(line, sizeof(line), "AIR %s", air_quality::severityLabel(score.overall));
@@ -375,7 +387,13 @@ void renderDetailDisplay(const air_quality::AirSample& sample,
     display::drawText(10, 252, line, kFg, 2, kBg);
 
     display::drawText(10, 314, "VOC", kDim, 1, kBg);
-    snprintf(line, sizeof(line), "%u", sample.vocIndex);
+    if (!sgpOnline) {
+        snprintf(line, sizeof(line), "OFFLINE");
+    } else if (sgpWarmingUp) {
+        snprintf(line, sizeof(line), "WARMING");
+    } else {
+        snprintf(line, sizeof(line), "%u", sample.vocIndex);
+    }
     display::drawText(10, 332, line, kFg, 2, kBg);
 
     display::drawText(10, 410, "SEVERITY", kDim, 1, kBg);
@@ -396,9 +414,10 @@ void renderDetailDisplay(const air_quality::AirSample& sample,
 void HomeDetailRenderer::render(const air_quality::AirSample& sample,
                                 const air_quality::AirQualityScore& score,
                                 bool scdOnline,
-                                bool sgpOnline) {
+                                bool sgpOnline,
+                                bool sgpWarmingUp) {
     if (display::isReady()) {
-        renderDetailDisplay(sample, score, scdOnline, sgpOnline);
+        renderDetailDisplay(sample, score, scdOnline, sgpOnline, sgpWarmingUp);
         return;
     }
 
@@ -407,7 +426,13 @@ void HomeDetailRenderer::render(const air_quality::AirSample& sample,
     Serial.print("SCD41: ");
     Serial.print(scdOnline ? "LIVE" : "OFFLINE");
     Serial.print(" | SGP40: ");
-    Serial.println(sgpOnline ? "LIVE" : "OFFLINE");
+    if (!sgpOnline) {
+        Serial.println("OFFLINE");
+    } else if (sgpWarmingUp) {
+        Serial.println("WARMING");
+    } else {
+        Serial.println("LIVE");
+    }
     if (!sample.valid) {
         Serial.println("No sensor data yet.");
         return;
@@ -421,7 +446,13 @@ void HomeDetailRenderer::render(const air_quality::AirSample& sample,
     Serial.print("Humidity: ");
     Serial.print(sample.humidityPct, 1);
     Serial.print("% | VOC: ");
-    Serial.println(sample.vocIndex);
+    if (!sgpOnline) {
+        Serial.println("OFFLINE");
+    } else if (sgpWarmingUp) {
+        Serial.println("WARMING");
+    } else {
+        Serial.println(sample.vocIndex);
+    }
 
     Serial.print("CO2: ");
     Serial.print(air_quality::severityLabel(score.co2Severity));

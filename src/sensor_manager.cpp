@@ -3,6 +3,7 @@
 namespace {
 #if defined(DESKCOMPANION_BOARD_T_DISPLAY_S3_LONG)
 constexpr uint8_t kScd41Address = SCD40_I2C_ADDR_62;
+constexpr uint16_t kSgpWarmupSamples = 45;
 
 struct SensorBusCandidate {
     TwoWire* bus;
@@ -123,7 +124,10 @@ void SensorManager::resetState() {
     ready_ = false;
     scdReady_ = false;
     sgpReady_ = false;
-    lastReadMs_ = 0;
+    lastScdPollMs_ = 0;
+    lastSgpPollMs_ = 0;
+    lastLogMs_ = 0;
+    sgpSampleCount_ = 0;
     sensorBus_ = &Wire;
     activeBusLabel_ = "Wire";
     lastSample_ = air_quality::AirSample{};
@@ -190,15 +194,26 @@ void SensorManager::update(unsigned long nowMs) {
         return;
     }
 
-    if (nowMs - lastReadMs_ < app::SENSOR_READ_INTERVAL_MS && lastReadMs_ != 0) {
-        return;
+    if (scdReady_ &&
+        (lastScdPollMs_ == 0 || (nowMs - lastScdPollMs_) >= app::SCD_POLL_INTERVAL_MS)) {
+        pollScd41();
+        lastScdPollMs_ = nowMs;
     }
-    readSensors();
-    lastReadMs_ = nowMs;
+
+    if (sgpReady_ &&
+        (lastSgpPollMs_ == 0 || (nowMs - lastSgpPollMs_) >= app::SGP_READ_INTERVAL_MS)) {
+        pollSgp40();
+        lastSgpPollMs_ = nowMs;
+    }
+
+    if (lastSample_.valid &&
+        (lastLogMs_ == 0 || (nowMs - lastLogMs_) >= app::SENSOR_LOG_INTERVAL_MS)) {
+        logSample();
+        lastLogMs_ = nowMs;
+    }
 }
 
-void SensorManager::readSensors() {
-    bool gotFreshData = false;
+void SensorManager::pollScd41() {
     bool scdReady = false;
 
     if (scd4x_.getDataReadyStatus(scdReady) == 0 && scdReady) {
@@ -210,31 +225,51 @@ void SensorManager::readSensors() {
             lastSample_.co2ppm = co2;
             lastSample_.temperatureC = tempC;
             lastSample_.humidityPct = hum;
-            gotFreshData = true;
+            lastSample_.valid = true;
+            lastSample_.timestampMs = millis();
+            refreshScore();
         }
+    }
+}
+
+void SensorManager::pollSgp40() {
+    const float temperatureC = isfinite(lastSample_.temperatureC) ? lastSample_.temperatureC : 25.0f;
+    const float humidityPct = isfinite(lastSample_.humidityPct) ? lastSample_.humidityPct : 50.0f;
+
+    lastSample_.vocIndex = static_cast<uint16_t>(sgp40_.measureVocIndex(temperatureC, humidityPct));
+    ++sgpSampleCount_;
+
+    if (lastSample_.valid) {
+        refreshScore();
+    }
+}
+
+void SensorManager::refreshScore() {
+    lastScore_ = air_quality::evaluateAirQuality(lastSample_);
+}
+
+void SensorManager::logSample() {
+    Serial.print("[SENSOR] bus=");
+    Serial.print(activeBusLabel_);
+    Serial.print(" co2=");
+    Serial.print(lastSample_.co2ppm);
+    Serial.print(" temp=");
+    Serial.print(lastSample_.temperatureC, 1);
+    Serial.print("C hum=");
+    Serial.print(lastSample_.humidityPct, 1);
+    Serial.print("% ");
+
+    if (sgpReady_ && sgpSampleCount_ < kSgpWarmupSamples) {
+        Serial.print("voc=warming(");
+        Serial.print(sgpSampleCount_);
+        Serial.print("/");
+        Serial.print(kSgpWarmupSamples);
+        Serial.println(")");
+        return;
     }
 
-    if (gotFreshData) {
-        if (sgpReady_) {
-            lastSample_.vocIndex = static_cast<uint16_t>(sgp40_.measureVocIndex(
-                lastSample_.temperatureC, lastSample_.humidityPct));
-        } else {
-            lastSample_.vocIndex = 0;
-        }
-        lastSample_.valid = true;
-        lastSample_.timestampMs = millis();
-        lastScore_ = air_quality::evaluateAirQuality(lastSample_);
-        Serial.print("[SENSOR] bus=");
-        Serial.print(activeBusLabel_);
-        Serial.print(" co2=");
-        Serial.print(lastSample_.co2ppm);
-        Serial.print(" temp=");
-        Serial.print(lastSample_.temperatureC, 1);
-        Serial.print("C hum=");
-        Serial.print(lastSample_.humidityPct, 1);
-        Serial.print("% voc=");
-        Serial.println(lastSample_.vocIndex);
-    }
+    Serial.print("voc=");
+    Serial.println(lastSample_.vocIndex);
 }
 
 const air_quality::AirSample& SensorManager::latestSample() const {
@@ -255,4 +290,12 @@ bool SensorManager::scdReady() const {
 
 bool SensorManager::sgpReady() const {
     return sgpReady_;
+}
+
+bool SensorManager::sgpWarmingUp() const {
+#if defined(DESKCOMPANION_BOARD_T_DISPLAY_S3_LONG)
+    return sgpReady_ && sgpSampleCount_ < kSgpWarmupSamples;
+#else
+    return false;
+#endif
 }

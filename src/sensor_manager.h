@@ -18,10 +18,14 @@ public:
     bool isReady() const;
     bool scdReady() const;
     bool sgpReady() const;
+    bool sgpWarmingUp() const;
 
 private:
     void resetState();
-    void readSensors();
+    void pollScd41();
+    void pollSgp40();
+    void refreshScore();
+    void logSample();
 #if defined(DESKCOMPANION_BOARD_T_DISPLAY_S3_LONG)
     bool initScd41OnBus(TwoWire& bus, const char* label);
 #endif
@@ -30,7 +34,10 @@ private:
     air_quality::AirSample lastSample_;
     air_quality::AirQualityScore lastScore_;
 
-    unsigned long lastReadMs_ = 0;
+    unsigned long lastScdPollMs_ = 0;
+    unsigned long lastSgpPollMs_ = 0;
+    unsigned long lastLogMs_ = 0;
+    uint16_t sgpSampleCount_ = 0;
     bool ready_ = false;
     bool scdReady_ = false;
     bool sgpReady_ = false;
